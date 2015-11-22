@@ -16,6 +16,7 @@ enum EProgrammingState
 };
 
 void hadleButtons();
+void handleIncrementingButton();
 void incrementHours();
 void incrementMinutes();
 void stopSeconds();
@@ -29,19 +30,20 @@ int getLatchPin(EPartOfTime partOfTime);
 
 RTC_DS1307 RTC;
 
-int hoursDataPin            = 2;
-int hoursClockPin           = 3;
-int hoursLatchPin           = 4;
+int hoursDataPin            = 11;
+int hoursClockPin           = 12;
+int hoursLatchPin           = 13;
 int minutesDataPin          = 8;
 int minutesClockPin         = 9;
 int minutesLatchPin         = 10;
-int secondsDataPin          = 11;
-int secondsClockPin         = 12;
-int secondsLatchPin         = 13;
+int secondsDataPin          = 2;
+int secondsClockPin         = 3;
+int secondsLatchPin         = 4;
 int toggleProgrammingButton = 5;
 int incrementingButton      = 6;
 
-int lastProgrammingButtonState = LOW;
+int lastProgrammingButtonState  = LOW;
+int lastIncrementingButtonState = LOW;
 EProgrammingState programmingState = EProgrammingState_none;
 
 void setup()
@@ -54,7 +56,7 @@ void setup()
   {
     Serial.println("RTC is NOT running!");  
   }
-  //RTC.adjust(DateTime(__DATE__, __TIME__));
+ // RTC.adjust(DateTime(__DATE__, __TIME__));
   
   pinMode(hoursDataPin,    OUTPUT);
   pinMode(hoursClockPin,   OUTPUT);
@@ -76,7 +78,8 @@ void loop()
   printTimeToSerialMonitor(&now);
 
   hadleButtons();
-
+  handleIncrementingButton();
+  
   byte hours   = convertHourToBitwiseFormat(now.hour());
   byte minutes = convertSecondsOrMinutesToBitwiseFormat(now.minute());
   byte seconds = convertSecondsOrMinutesToBitwiseFormat(now.second());
@@ -85,7 +88,7 @@ void loop()
   writeByte(minutes, EPartOfTime_minute);
   writeByte(seconds, EPartOfTime_second);
 
-  delay(200);
+  //delay(200);
 }
 
 void hadleButtons()
@@ -102,17 +105,42 @@ void hadleButtons()
 
     if (buttonState == HIGH)
     {
-      if (programmingState != EProgrammingState_none)
+      if (programmingState == EProgrammingState_none)
       {
-        Serial.println("DUPA -> koniec programowania!");
-        incrementHours();
-        incrementMinutes();
-        programmingState = EProgrammingState_none;
+        programmingState = EProgrammingState_hour;
+      }
+      else if (programmingState == EProgrammingState_hour)
+      {
+        programmingState = EProgrammingState_minute;
       }
       else
       {
-        Serial.println("DUPA -> start programowania!");
-        programmingState = EProgrammingState_minute;
+        programmingState = EProgrammingState_none;
+      }
+    }
+  }
+}
+
+void handleIncrementingButton()
+{
+  if (programmingState == EProgrammingState_none)
+  {
+    return;
+  }
+
+  int buttonState = digitalRead(incrementingButton);
+  if (buttonState != lastIncrementingButtonState)
+  {
+    lastIncrementingButtonState = buttonState;
+    if (buttonState == HIGH)
+    {
+      if (programmingState == EProgrammingState_hour)
+      {
+        incrementHours();
+      }
+      else if (programmingState == EProgrammingState_minute)
+      {
+        incrementMinutes();
       }
     }
   }
@@ -123,7 +151,6 @@ void stopSeconds()
   DateTime currentTime = RTC.now();
   TimeSpan seconds(currentTime.second());
   currentTime = currentTime - seconds;
-  Serial.println(currentTime.second(), DEC);
   RTC.adjust(currentTime);
 }
 
@@ -153,6 +180,12 @@ void writeByte(byte data, EPartOfTime partOfTime)
 
 void printTimeToSerialMonitor(DateTime *time)
 {
+  static int lastSecond = 0;
+
+  if (time->second() == lastSecond && programmingState == EProgrammingState_none) return;
+
+  lastSecond = time->second();
+  
   Serial.print(time->day(), DEC);
   Serial.print('/');
   Serial.print(time->month(), DEC);
@@ -166,7 +199,6 @@ void printTimeToSerialMonitor(DateTime *time)
   Serial.print(time->second(), DEC);
   Serial.println();
 }
-
 
 byte convertHourToBitwiseFormat(int decimal)
 {
